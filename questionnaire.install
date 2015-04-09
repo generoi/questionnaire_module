@@ -1,0 +1,112 @@
+<?php
+
+/**
+ * Implements hook_field_schema().
+ */
+function questionnaire_field_schema($field) {
+  $columns = array(
+    'question' => array(
+      'type' => 'varchar',
+      'length' => $field['settings']['max_length'],
+      'not null' => FALSE,
+    ),
+    'answer' => array(
+      'type' => 'int',
+      'not null' => FALSE,
+      'default' => 1,
+    ),
+  );
+  return array(
+    'columns' => $columns,
+  );
+}
+
+/**
+ * Implements hook_schema().
+ */
+function questionnaire_schema() {
+  $schema['questionnaire'] = array(
+    'description' => 'Table for storing questionnaire results',
+    'fields' => array(
+      'rid' => array(
+        'description' => 'The primary identifier for a result.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'entity_type' => array(
+        'description' => 'The type of the parent entity.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+      ),
+      'entity_id' => array(
+        'description' => 'The ID of the parent entity.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'result' => array(
+        'description' => 'The result of the questionnaire.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'ip_address' => array(
+        'description' => 'The IP address of the submitter.',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'timestamp' => array(
+        'description' => 'The Unix timestamp when the transaction was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('rid'),
+  );
+  $schema['questionnaire_website'] = array(
+    'description' => 'Table for storing questionnaire website URL.',
+    'fields' => array(
+      'entity_type' => array(
+        'description' => 'The type of the entity that the website is applied to.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+      ),
+      'entity_id' => array(
+        'description' => 'Entity ID that the website is applied to.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'website' => array(
+        'description' => 'The website URL.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'motivation' => array(
+        'description' => 'The URL to the motivation page.',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+    ),
+    'primary key' => array('entity_id'),
+  );
+  return $schema;
+}
+
+/**
+ * Adds a motivation column to the questionnaire_website table.
+ */
+function questionnaire_update_7001() {
+  $table = 'questionnaire_website';
+  $schema = drupal_get_schema_unprocessed('questionnaire', $table);
+  foreach (array('motivation') as $field) {
+    db_add_field($table, $field, $schema['fields'][$field]);
+  }
+}

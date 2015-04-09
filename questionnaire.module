@@ -1,0 +1,354 @@
+<?php
+
+// Load all Field module hooks for Questionnaire.
+require_once drupal_get_path('module', 'questionnaire') . '/questionnaire.field.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function questionnaire_menu() {
+  $items['node/%node/%questionnaire_result'] = array(
+    'title callback' => 'questionnaire_result_page_title',
+    'title arguments' => array(1),
+    'page callback' => 'questionnaire_result_page',
+    'page arguments' => array(1, 2),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Loads a result object from the database.
+ *
+ * @param $rid
+ *   The result ID.
+ *
+ * @return
+ *   A result object or FALSE if the result is not found.
+ */
+function questionnaire_result_load($rid = NULL) {
+  $result = db_select('questionnaire', 'q')
+    ->fields('q')
+    ->condition('rid', $rid)
+    ->execute()
+    ->fetchObject();
+
+  return $result ? $result : FALSE;
+}
+
+/**
+ * Title callback; Questionnaire result page.
+ */
+function questionnaire_result_page_title($node) {
+  return $node->title;
+}
+
+/**
+ * Page callback; Questionnaire result.
+ *
+ * @param $node
+ *   The node object.
+ * @param $result
+ *   The result object.
+ */
+function questionnaire_result_page($node, $result) {
+  // Render a generated image with the questionnaire results.
+  $path = $GLOBALS ['base_url'] . '/' . drupal_get_path('module', 'questionnaire') . '/image/result.php?result=' . $result->result . '&rid=' . $result->rid;
+  $output['result'] = array(
+    '#type' => 'container',
+    '#attributes' => array(),
+    'image' => array(
+      '#type' => 'markup',
+      '#markup' => '<img src="' . $path . '" />',
+    ),
+  );
+
+  drupal_add_html_head(array(
+    '#tag' => 'meta',
+    '#attributes' => array(
+      'property' => 'og:title',
+      'content' => drupal_get_title() . ' -' . t('candidate survey'),
+    ),
+  ), 'og_title');
+
+  drupal_add_html_head(array(
+    '#tag' => 'meta',
+    '#attributes' => array(
+      'property' => 'og:description',
+      'content' => t('I just took the @candidate -candidate survey and got the result @result%. Give it a try to see which statements you agree on!', array(
+        '@candidate' => $node->title,
+        '@result' => $result->result,
+      )),
+    ),
+  ), 'og_description');
+
+  drupal_add_html_head(array(
+    '#tag' => 'meta',
+    '#attributes' => array(
+      'property' => 'og:url',
+      'content' => $GLOBALS ['base_url'] . '/' . request_uri(),
+    ),
+  ), 'og_url');
+
+  drupal_add_html_head(array(
+    '#tag' => 'meta',
+    '#attributes' => array(
+      'property' => 'og:image',
+      'content' => $path,
+    ),
+  ), 'og_image');
+
+  // Do javascript redirect if website field has a value.
+  if ($website = questionnaire_website_load('node', $node)) {
+    if (!empty($website['website'])) {
+      $data = 'window.location = "' . $website['website'] . '"';
+      drupal_add_js($data, 'inline');
+    }
+  }
+
+  return $output;
+}
+
+/**
+ * Form callback; Questions form.
+ *
+ * @param $questions
+ *   An array of questions.
+ *
+ * @see questionnaire_question_form_submit()
+ */
+function questionnaire_question_form($form, &$form_state, $questions = array(), $entity, $entity_type) {
+  $form = array();
+
+  list($id) = entity_extract_ids($entity_type, $entity);
+
+  // Show results if form is submitted.
+  if ($form_state['submitted']) {
+    $values = $form_state['values'];
+    $count = count($questions);
+
+    // Count matches in yes/no answers.
+    $matches = 0;
+    foreach ($values as $key => $value) {
+      // Only collect values for questions.
+      if (strpos($key, 'question') !== FALSE) {
+        // Get the index for the submitted question.
+        $key = abs(filter_var($key, FILTER_SANITIZE_NUMBER_INT));
+        $answer = $questions[$key]['answer'];
+        if ($answer == $value) {
+          $matches++;
+        }
+      }
+    }
+    // Count percentage in matches.
+    $result = round(($matches / $count) * 100);
+
+    // Insert values into database.
+    $rid = db_insert('questionnaire')
+      ->fields(array(
+        'entity_type' => $entity_type,
+        'entity_id' => $id,
+        'result' => $result,
+        'ip_address' => ip_address(),
+        'timestamp' => REQUEST_TIME,
+      ))
+      ->execute();
+
+    // Show results to the user.
+    $form['result'] = array(
+      '#type' => 'container',
+      '#attributes' => array('class' => array('clearfix')),
+      'left' => array(
+        '#type' => 'container',
+        '#attributes' => array('class' => array('col-6', 'text-center', 'result-percent')),
+        'title' => array(
+          '#markup' => '<h2 class="result">' . t('%result%', array('%result' => $result)) . '</h2>',
+          '#weight' => 1,
+        ),
+      ),
+      'right' => array(
+        '#type' => 'container',
+        '#attributes' => array('class' => array('col-6', 'text-center')),
+      ),
+      'bottom' => array(
+        '#type' => 'container',
+        '#attributes' => array('class' => array('col-12')),
+        'share' => array(
+          '#theme' => 'link',
+          '#text' => t('Share results'),
+          '#path' => "$entity_type/$id/$rid",
+          '#options' => array(
+            'attributes' => array('class' => array('share-btn')),
+            'html' => FALSE,
+            'absolute' => TRUE,
+          ),
+          '#weight' => 0,
+          '#prefix' => '<div class="col-8">',
+          '#suffix' => '</div>',
+        ),
+        'link' => array(
+          '#theme' => 'link',
+          '#text' => t('Try again'),
+          '#path' => "$entity_type/$id",
+          '#options' => array(
+            'attributes' => array('class' => array('try-again')),
+            'html' => FALSE,
+          ),
+          '#weight' => 1,
+          '#prefix' => '<div class="col-4 text-center">',
+          '#suffix' => '</div>',
+        ),
+      ),
+    );
+
+    // Add a link to the questionnaire website.
+    if ($website = questionnaire_website_load($entity_type, $entity)) {
+      if (!empty($website['motivation'])) {
+        $link = l(t('here'), $website['motivation'], array('attributes' => array('target' => '_parent')));
+        $form['result']['motivation'] = array(
+          '#markup' => '<p class="motivation col-12">' . t('Read the reasoning to my answers !link.', array('!link' => $link)) . '</p>',
+          '#weight' => 2,
+        );
+      }
+    }
+
+    // Text if answers matches over 80%.
+    if ($result >= 80) {
+      $form['result']['left']['stars'] = array(
+        '#type' => 'container',
+        '#attributes' => array(),
+        '0' => array('#markup' => '<span class="star"></span>'),
+        '1' => array('#markup' => '<span class="star"></span>'),
+        '2' => array('#markup' => '<span class="star"></span>'),
+      );
+      $form['result']['right']['text'] = array(
+        '#markup' => '<p class="result-text">' . t('Great! We think alike! Read more about me and my thoughts here on my website. Thanks!') . '</p>',
+      );
+    }
+    // Text if answers matches over 50% and under 80%.
+    elseif ($result <= 79 && $result >= 50) {
+      $form['result']['left']['stars'] = array(
+        '#type' => 'container',
+        '#attributes' => array(),
+        '0' => array('#markup' => '<span class="star"></span>'),
+        '1' => array('#markup' => '<span class="star"></span>'),
+        '2' => array('#markup' => '<span class="no-star"></span>'),
+      );
+      $form['result']['right']['text'] = array(
+        '#markup' => '<p class="result-text">' . t('Great! We mostly agree! Read more about me and my thoughts here on my website. Thanks!') . '</p>',
+      );
+    }
+    // Text if answers matches under 50%.
+    else {
+      $form['result']['left']['stars'] = array(
+        '#type' => 'container',
+        '#attributes' => array(),
+        '0' => array('#markup' => '<span class="star"></span>'),
+        '1' => array('#markup' => '<span class="no-star"></span>'),
+        '2' => array('#markup' => '<span class="no-star"></span>'),
+      );
+      $form['result']['right']['text'] = array(
+        '#markup' => '<p class="result-text">' . t('Great! Though we don\'t agree on all points, please read more about me and my thoughts here on my website. Thanks!') . '</p>',
+      );
+    }
+
+    drupal_add_js(drupal_get_path('module', 'questionnaire') . '/js/facebook.js', 'file');
+
+  }
+  // Show form if form is not submitted.
+  else {
+    foreach ($questions as $key => $question) {
+      // Create yes/no radios for each question.
+      $form["question-$key"] = array(
+        '#type' => 'radios',
+        '#title' => $question['question'],
+        '#attributes' => array(
+          'class' => array('question', 'clearfix'),
+          'data-index' => $key,
+        ),
+        '#options' => array(
+          1 => t('Yes'),
+          0 => t('No'),
+        ),
+      );
+    }
+    // Create a progress indicator.
+    $form['progress'] = array(
+      '#type' => 'container',
+      '#attributes' => array(
+        'class' => array('progress'),
+      ),
+      'current' => array('#markup' => '<span class="current">1</span>'),
+      'separator' => array('#markup' => '<span>/</span>'),
+      'total' => array('#markup' => '<span>' . count($questions) . '</span>'),
+    );
+
+    $form['#submit'][] = 'questionnaire_question_form_submit';
+
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Submit handler; Questions form.
+ *
+ * @see questionnaire_question_form()
+ */
+function questionnaire_question_form_submit($form, &$form_state) {
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Website insert callback.
+ *
+ * This function inserts a website URL attached to the question field.
+ *
+ * @param $entity_type
+ *   The entity type.
+ * @param $entity
+ *   The entity object.
+ */
+function questionnaire_website_insert($entity_type, $entity) {
+  // The entity ID.
+  list($id) = entity_extract_ids($entity_type, $entity);
+  // The website URL.
+  $url = $entity->website;
+  $motivation = $entity->motivation;
+  // Insert values into the table.
+  db_merge('questionnaire_website')
+    ->key(array(
+      'entity_id' => $id,
+      'entity_type' => $entity_type,
+    ))
+    ->fields(array(
+      'website' => $url,
+      'motivation' => $motivation,
+    ))
+    ->execute();
+}
+
+/**
+ * Helper function for loading a website.
+ *
+ * @param $entity_type
+ *   The entity type.
+ * @param $entity
+ *   The entity object.
+ */
+function questionnaire_website_load($entity_type, $entity) {
+  list($id) = entity_extract_ids($entity_type, $entity);
+  $result = db_select('questionnaire_website', 'qw')
+    ->fields('qw', array('website', 'motivation'))
+    ->condition('entity_id', $id)
+    ->condition('entity_type', $entity_type)
+    ->execute()
+    ->fetchAssoc();
+
+  return $result ? $result : FALSE;
+}
