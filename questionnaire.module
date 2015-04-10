@@ -114,11 +114,17 @@ function questionnaire_result_page($node, $result) {
  * Form callback; Questions form.
  *
  * @param $questions
- *   An array of questions.
+ *   An array of questions (field values).
+ * @param $instance
+ *   The field instance.
+ * @param $entity
+ *   The entity being displayed.
+ * @param $entity_type
+ *   The type of $entity.
  *
  * @see questionnaire_question_form_submit()
  */
-function questionnaire_question_form($form, &$form_state, $questions = array(), $entity, $entity_type) {
+function questionnaire_question_form($form, &$form_state, $questions = array(), $instance, $entity, $entity_type) {
   $form = array();
 
   list($id) = entity_extract_ids($entity_type, $entity);
@@ -155,105 +161,70 @@ function questionnaire_question_form($form, &$form_state, $questions = array(), 
       ))
       ->execute();
 
-    // Show results to the user.
-    $form['result'] = array(
-      '#type' => 'container',
-      '#attributes' => array('class' => array('clearfix')),
-      'left' => array(
-        '#type' => 'container',
-        '#attributes' => array('class' => array('col-6', 'text-center', 'result-percent')),
-        'title' => array(
-          '#markup' => '<h2 class="result">' . t('%result%', array('%result' => $result)) . '</h2>',
-          '#weight' => 1,
+    $build = array(
+      'percentage' => $result,
+      'share' => array(
+        '#theme' => 'link',
+        '#text' => t('Share results'),
+        '#path' => "$entity_type/$id/$rid",
+        '#options' => array(
+          'attributes' => array('class' => array('share-btn')),
+          'html' => FALSE,
+          'absolute' => TRUE,
         ),
       ),
-      'right' => array(
-        '#type' => 'container',
-        '#attributes' => array('class' => array('col-6', 'text-center')),
-      ),
-      'bottom' => array(
-        '#type' => 'container',
-        '#attributes' => array('class' => array('col-12')),
-        'share' => array(
-          '#theme' => 'link',
-          '#text' => t('Share results'),
-          '#path' => "$entity_type/$id/$rid",
-          '#options' => array(
-            'attributes' => array('class' => array('share-btn')),
-            'html' => FALSE,
-            'absolute' => TRUE,
-          ),
-          '#weight' => 0,
-          '#prefix' => '<div class="col-8">',
-          '#suffix' => '</div>',
-        ),
-        'link' => array(
-          '#theme' => 'link',
-          '#text' => t('Try again'),
-          '#path' => "$entity_type/$id",
-          '#options' => array(
-            'attributes' => array('class' => array('try-again')),
-            'html' => FALSE,
-          ),
-          '#weight' => 1,
-          '#prefix' => '<div class="col-4 text-center">',
-          '#suffix' => '</div>',
+      'reset' => array(
+        '#theme' => 'link',
+        '#text' => t('Try again'),
+        '#path' => "$entity_type/$id",
+        '#options' => array(
+          'attributes' => array('class' => array('try-again')),
+          'html' => FALSE,
         ),
       ),
     );
 
-    // Add a link to the questionnaire website.
-    if ($website = questionnaire_website_load($entity_type, $entity)) {
-      if (!empty($website['motivation'])) {
-        $link = l(t('here'), $website['motivation'], array('attributes' => array('target' => '_parent')));
-        $form['result']['motivation'] = array(
-          '#markup' => '<p class="motivation col-12">' . t('Read the reasoning to my answers !link.', array('!link' => $link)) . '</p>',
-          '#weight' => 2,
-        );
-      }
-    }
-
     // Text if answers matches over 80%.
     if ($result >= 80) {
-      $form['result']['left']['stars'] = array(
+      $build['stars'] = array(
         '#type' => 'container',
         '#attributes' => array(),
-        '0' => array('#markup' => '<span class="star"></span>'),
-        '1' => array('#markup' => '<span class="star"></span>'),
-        '2' => array('#markup' => '<span class="star"></span>'),
+        '0' => array('#markup' => '<span class="star">★</span>'),
+        '1' => array('#markup' => '<span class="star">★</span>'),
+        '2' => array('#markup' => '<span class="star">★</span>'),
       );
-      $form['result']['right']['text'] = array(
-        '#markup' => '<p class="result-text">' . t('Great! We think alike! Read more about me and my thoughts here on my website. Thanks!') . '</p>',
-      );
+      $build['text'] = $instance['settings']['result_1'];
     }
     // Text if answers matches over 50% and under 80%.
     elseif ($result <= 79 && $result >= 50) {
-      $form['result']['left']['stars'] = array(
+      $build['stars'] = array(
         '#type' => 'container',
         '#attributes' => array(),
-        '0' => array('#markup' => '<span class="star"></span>'),
-        '1' => array('#markup' => '<span class="star"></span>'),
-        '2' => array('#markup' => '<span class="no-star"></span>'),
+        '0' => array('#markup' => '<span class="star">★</span>'),
+        '1' => array('#markup' => '<span class="star">★</span>'),
+        '2' => array('#markup' => '<span class="no-star">☆</span>'),
       );
-      $form['result']['right']['text'] = array(
-        '#markup' => '<p class="result-text">' . t('Great! We mostly agree! Read more about me and my thoughts here on my website. Thanks!') . '</p>',
-      );
+      $build['text'] = $instance['settings']['result_2'];
     }
     // Text if answers matches under 50%.
     else {
-      $form['result']['left']['stars'] = array(
+      $build['stars'] = array(
         '#type' => 'container',
         '#attributes' => array(),
-        '0' => array('#markup' => '<span class="star"></span>'),
-        '1' => array('#markup' => '<span class="no-star"></span>'),
-        '2' => array('#markup' => '<span class="no-star"></span>'),
+        '0' => array('#markup' => '<span class="star">★</span>'),
+        '1' => array('#markup' => '<span class="no-star">☆</span>'),
+        '2' => array('#markup' => '<span class="no-star">☆</span>'),
       );
-      $form['result']['right']['text'] = array(
-        '#markup' => '<p class="result-text">' . t('Great! Though we don\'t agree on all points, please read more about me and my thoughts here on my website. Thanks!') . '</p>',
-      );
+      $build['text'] = $instance['settings']['result_3'];
     }
 
-    drupal_add_js(drupal_get_path('module', 'questionnaire') . '/js/facebook.js', 'file');
+    // Theme the results.
+    $form += array(
+      '#theme' => 'questionnaire',
+      '#result' => $build,
+      '#entity' => $entity,
+      '#entity_type' => $entity_type,
+    );
 
   }
   // Show form if form is not submitted.
@@ -351,4 +322,42 @@ function questionnaire_website_load($entity_type, $entity) {
     ->fetchAssoc();
 
   return $result ? $result : FALSE;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function questionnaire_theme() {
+  return array(
+    'questionnaire' => array(
+      'render element' => 'elements',
+      'template' => 'questionnaire-result',
+    ),
+  );
+}
+
+/**
+ * Implements template_preprocess_questionnaire().
+ */
+function template_preprocess_questionnaire(&$variables) {
+  $variables ['entity'] = $variables ['elements']['#entity'];
+  $variables ['entity_type'] = $variables ['elements']['#entity_type'];
+  $entity = $variables ['entity'];
+  $entity_type = $variables ['entity_type'];
+
+  // Provide variables for the template.
+  $variables ['result'] = $variables ['elements']['#result'];
+  $variables ['stars'] = $variables ['result']['stars'];
+  $variables ['percentage'] = $variables ['result']['percentage'];
+  $variables ['text'] = $variables ['result']['text'];
+  $variables ['share'] = $variables ['result']['share'];
+  $variables ['reset'] = $variables ['result']['reset'];
+
+  // Add a link to the questionnaire website.
+  if ($website = questionnaire_website_load($entity_type, $entity)) {
+    if (!empty($website['motivation'])) {
+      $link = l(t('here'), $website['motivation'], array('attributes' => array('target' => '_parent')));
+      $variables ['motivation'] = t('Read the reasoning to my answers !link.', array('!link' => $link));
+    }
+  }
 }

@@ -34,6 +34,38 @@ function questionnaire_field_settings_form($field, $instance, $has_data) {
       // max_length to increase.
       '#disabled' => $has_data,
     );
+    $form['app_id'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Facebook App ID'),
+      '#default_value' => $settings['app_id'],
+      '#required' => TRUE,
+      '#description' => t('A Facebook app ID is needed for the share button.'),
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_instance_settings_form().
+ */
+function questionnaire_field_instance_settings_form($field, $instance) {
+  $settings = $instance['settings'];
+  $form = array();
+
+  if ($field['type'] == 'question') {
+    $results = array(
+      1 => '80-100',
+      2 => '50-79',
+      3 => '0-49',
+    );
+    foreach ($results as $key => $result) {
+      $form["result_$key"] = array(
+        '#type' => 'textarea',
+        '#title' => t('Result text for %result %', array('%result' => $result)),
+        '#default_value' => $settings["result_$key"],
+      );
+    }
   }
 
   return $form;
@@ -66,12 +98,20 @@ function questionnaire_field_formatter_view($entity_type, $entity, $field, $inst
           'data' => drupal_get_path('module', 'questionnaire') . '/js/questionnaire.js',
           'type' => 'file',
         ),
+        array(
+          'data' => drupal_get_path('module', 'questionnaire') . '/js/facebook.js',
+          'type' => 'file',
+        ),
+        array(
+          'data' => array('questionnaire' => array('appID' => $field['settings']['app_id'])),
+          'type' => 'setting',
+        ),
       ),
     ),
   );
 
   // Display a form with questions.
-  $elements[0] = drupal_get_form('questionnaire_question_form', $items, $entity, $entity_type);
+  $elements[0] = drupal_get_form('questionnaire_question_form', $items, $instance, $entity, $entity_type);
 
   return $elements;
 }
