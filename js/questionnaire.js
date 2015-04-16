@@ -1,4 +1,6 @@
 (function ($) {
+  Drupal.questionnaire = Drupal.questionnaire || {};
+
   Drupal.behaviors.questionnaire = {
     attach: function (context, settings) {
 
@@ -18,28 +20,20 @@
           , len;
 
         // if we haven't submitted yet and we have a "pre-view" to show before the quiz starts...
-        if($questionsForm.find('.result-text').length == 0 && previewEnabled &&  $('#questionnaire-pre-view .start-button').length > 0) {
+        if($questionsForm.find('#questionnaire-result').length == 0 && previewEnabled &&  $('#questionnaire-pre-view .start-button').length > 0) {
           $questionsForm.hide();
 
           $('#questionnaire-pre-view .start-button').click(function() {
+            //alert("foo");
             $preView.hide();
             $questionsForm.show();
-
-            if (afterStartFunctions && afterStartFunctions.length > 0) {
-              for (i = 0, len = afterStartFunctions.length; i < len; i++) {
-                afterStartFunctions[i]();
-              };
-            }
+            callFunctions(afterStartFunctions);
           });
 
         // if we have submitted and then want to run the afterEndFunctions we make available...
         } else {
           $preView.hide();
-          if (afterEndFunctions && afterEndFunctions.length > 0) {
-            for (i = 0, len = afterEndFunctions.length; i < len; i++) {
-              afterEndFunctions[i]();
-            };
-          }
+          callFunctions(afterEndFunctions);
         }
 
         $submit.hide();
@@ -65,7 +59,9 @@
             });
           }
           else {
-            $questionsForm.submit();
+            if (callFunctions(preSubmitFunctions)) {
+              $questionsForm.submit();
+            }
           }
         });
 
@@ -97,25 +93,49 @@
             href: url,
           }, function(response) {});
         }
+
+        // expose it...
+        Drupal.questionnaire.postToFeed = postToFeed;
+
       });
      });
 
     }
   };
 
-  Drupal.questionnaire = Drupal.questionnaire || {};
 
   var afterStartFunctions = [];
+  var preSubmitFunctions = [];
   var afterEndFunctions = [];
 
   Drupal.questionnaire.afterStart = function(fn) {
     afterStartFunctions.push(fn);
   };
 
+  // if one of these return false, we will not submit the form...
+  Drupal.questionnaire.preSubmit = function(fn) {
+    preSubmitFunctions.push(fn);
+  };
+
   Drupal.questionnaire.afterEnd = function(fn) {
     afterEndFunctions.push(fn);
   };
 
+  function callFunctions(fns_arr) {
+    var i,
+        len,
+        retval = true; // we have a boolean here if we want one of the fns
+                       // to return false, we can also return false for this loop
+
+    if (fns_arr && fns_arr.length > 0) {
+      for (i = 0, len = fns_arr.length; i < len; i++) {
+        if (fns_arr[i]() === false) {
+          retval = false;
+        }
+      }
+    }
+    return retval;
+  }
 
 
 })(jQuery);
